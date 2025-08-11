@@ -348,14 +348,22 @@ class ControlPanelUI:
             tracker_mode.OFFLINE_3_STAGE,
             #tracker_mode.OFFLINE_3_STAGE_MIXED,
         ]
-
+        
         open_, _ = imgui.collapsing_header(
             "Choose Analysis Method##SimpleAnalysisMethod",
             flags=imgui.TREE_NODE_DEFAULT_OPEN,
         )
         if open_:
 
-            modes_display = [m.value for m in modes_enum]
+            # Display labels expected by tests and external UI automation
+            modes_display = [
+                "Oscillation Detector",
+                "Live YOLO ROI Detection",
+                "Live User ROI",
+                "Live - YOLO + Oscillation (Experimental)",
+                "Offline AI Analysis (2-Stage)",
+                "Offline AI Analysis (3-Stage)",
+            ]
 
             processor = app.processor
             disable_combo = (
@@ -364,27 +372,45 @@ class ControlPanelUI:
                 or (processor and processor.is_processing and not processor.pause_event.is_set())
             )
             with _DisabledScope(disable_combo):
+                # Map current selected mode to index in our display order
+                mode_to_index = {
+                    tracker_mode.OSCILLATION_DETECTOR: 0,
+                    tracker_mode.LIVE_YOLO_ROI: 1,
+                    tracker_mode.LIVE_USER_ROI: 2,
+                    tracker_mode.LIVE_YOLO_OSCILLATION: 3,
+                    tracker_mode.OFFLINE_2_STAGE: 4,
+                    tracker_mode.OFFLINE_3_STAGE: 5,
+                }
                 try:
-                    cur_idx = modes_enum.index(app_state.selected_tracker_mode)
-                except ValueError:
+                    cur_idx = mode_to_index.get(app_state.selected_tracker_mode, 0)
+                except Exception:
                     cur_idx = 0
-                    app_state.selected_tracker_mode = modes_enum[cur_idx]
+                    app_state.selected_tracker_mode = list(mode_to_index.keys())[cur_idx]
 
                 clicked, new_idx = imgui.combo(
-                    "##TrackerModeCombo", cur_idx, modes_display
+                    "Tracker Type##TrackerModeComboGlobal", cur_idx, modes_display
                 )
                 self._help_tooltip(
                     "Choose analysis method:\n"
-                    "• Live Oscillation Detector: Fast, real-time analysis for rhythmic motion\n"
-                    "• Live YOLO ROI: AI-powered object detection with real-time tracking\n"
+                    "• Oscillation Detector: Fast, real-time analysis for rhythmic motion\n"
+                    "• Live YOLO ROI Detection: AI-powered object detection with real-time tracking\n"
                     "• Live User ROI: Manual region selection for custom tracking\n"
-                    "• Offline 2-Stage: GPU-accelerated batch processing\n"
-                    "• Offline 3-Stage: Full pipeline with advanced post-processing\n"
-                    "• Offline 3-Stage Mixed: Stage 2 signal + ROI tracking for BJ/HJ chapters"
+                    "• YOLO + Oscillation: Auto-detect focus area and detect oscillation\n"
+                    "• Offline AI Analysis (2-Stage): GPU-accelerated batch processing\n"
+                    "• Offline AI Analysis (3-Stage): Full pipeline with advanced post-processing"
                 )
 
             if clicked and new_idx != cur_idx:
-                new_mode = modes_enum[new_idx]
+                # Inverse mapping from index back to enum
+                index_to_mode = {
+                    0: tracker_mode.OSCILLATION_DETECTOR,
+                    1: tracker_mode.LIVE_YOLO_ROI,
+                    2: tracker_mode.LIVE_USER_ROI,
+                    3: tracker_mode.LIVE_YOLO_OSCILLATION,
+                    4: tracker_mode.OFFLINE_2_STAGE,
+                    5: tracker_mode.OFFLINE_3_STAGE,
+                }
+                new_mode = index_to_mode.get(new_idx, tracker_mode.OSCILLATION_DETECTOR)
                 # Clear all overlays only when switching to a different mode
                 if app_state.selected_tracker_mode != new_mode:
                     if hasattr(app, 'logger') and app.logger:
@@ -400,6 +426,8 @@ class ControlPanelUI:
                         tr.set_tracking_mode("OSCILLATION_DETECTOR")
                     elif new_mode == tracker_mode.LIVE_YOLO_OSCILLATION:
                         tr.set_tracking_mode("YOLO_OSCILLATION")
+                    elif new_mode == tracker_mode.LIVE_YOLO_ROI:
+                        tr.set_tracking_mode("YOLO_ROI")
                     else:
                         tr.set_tracking_mode("YOLO_ROI")
 
@@ -1352,18 +1380,18 @@ class ControlPanelUI:
     def _render_start_stop_buttons(self, stage_proc, fs_proc, event_handlers):
         is_batch_mode = self.app.is_batch_processing_active
         is_analysis_running = stage_proc.full_analysis_active
-
+        
         # A "Live Tracking" session is only running if the processor is active
         # AND tracker processing has been explicitly enabled.
         is_live_tracking_running = (self.app.processor and
                                     self.app.processor.is_processing and
                                     self.app.processor.enable_tracker_processing)
-
+        
         is_setting_roi = self.app.is_setting_user_roi_mode
         is_any_process_active = is_batch_mode or is_analysis_running or is_live_tracking_running or is_setting_roi or stage_proc.scene_detection_active
-
+        
         if is_batch_mode:
-            imgui.text_ansi_colored("--- BATCH PROCESSING ACTIVE ---", 1.0, 0.7, 0.3) # TODO: move to theme, orange
+            imgui.text_ansi_colored("--- BATCH PROCESSING ACTIVE ---", 1.0, 0.7, 0.3)
             total_videos = len(self.app.batch_video_paths)
             current_idx = self.app.current_batch_video_index
             if 0 <= current_idx < total_videos:
@@ -1373,10 +1401,10 @@ class ControlPanelUI:
             if imgui.button("Abort Batch Process", width=-1):
                 self.app.abort_batch_processing()
             return
-
+        
         selected_mode = self.app.app_state_ui.selected_tracker_mode
         button_width = (imgui.get_content_region_available()[0] - imgui.get_style().item_spacing[0]) / 2
-
+        
         if is_any_process_active:
             status_text = "Processing..."
             if is_analysis_running:
@@ -1391,7 +1419,7 @@ class ControlPanelUI:
                 else:
                     if imgui.button("Pause Tracking", width=button_width):
                         self.app.processor.pause_processing()
-
+                
                 status_text = None
             elif is_setting_roi:
                 status_text = "Setting ROI..."
@@ -1439,7 +1467,7 @@ class ControlPanelUI:
                 # Normal start button
                 if imgui.button(start_text, width=button_width):
                     if handler: handler()
-
+        
         imgui.same_line()
         if not is_any_process_active:
             imgui.internal.push_item_flag(imgui.internal.ITEM_DISABLED, True)
@@ -1577,55 +1605,50 @@ class ControlPanelUI:
 
     def _render_tracking_axes_mode(self, stage_proc):
         """Renders UI elements for tracking axis mode."""
-        axis_modes = ["Both Axes (Up/Down + Left/Right)", "Up/Down Only (Vertical)", "Left/Right Only (Horizontal)"]
-        current_axis_mode_idx = 0
-        if self.app.tracking_axis_mode == "vertical":
-            current_axis_mode_idx = 1
-        elif self.app.tracking_axis_mode == "horizontal":
-            current_axis_mode_idx = 2
-
-        processor = self.app.processor
-        disable_axis_controls = (
-            stage_proc.full_analysis_active
-            or self.app.is_setting_user_roi_mode
-            or (processor and processor.is_processing and not processor.pause_event.is_set() and not self._is_normal_playback_mode())
-        )
-        if disable_axis_controls:
-            imgui.internal.push_item_flag(imgui.internal.ITEM_DISABLED, True)
-            imgui.push_style_var(imgui.STYLE_ALPHA, imgui.get_style().alpha * 0.5)
-
-        axis_mode_changed, new_axis_mode_idx = imgui.combo("##TrackingAxisModeComboGlobal", current_axis_mode_idx, axis_modes)
-        if axis_mode_changed:
-            old_mode = self.app.tracking_axis_mode
-            if new_axis_mode_idx == 0:
-                self.app.tracking_axis_mode = "both"
-            elif new_axis_mode_idx == 1:
-                self.app.tracking_axis_mode = "vertical"
+        app = self.app
+        
+        imgui.text("Axis:")
+        imgui.same_line()
+        imgui.push_item_width(100)
+        axis_mode_opts = ["Both", "Vertical", "Horizontal"]
+        current_mode_idx = 0
+        if app.tracking_axis_mode == "vertical":
+            current_mode_idx = 1
+        elif app.tracking_axis_mode == "horizontal":
+            current_mode_idx = 2
+            
+        changed, new_mode_idx = imgui.combo("##TrackingAxes", current_mode_idx, axis_mode_opts)
+        if changed:
+            if new_mode_idx == 0:
+                app.tracking_axis_mode = "both"
+            elif new_mode_idx == 1:
+                app.tracking_axis_mode = "vertical"
             else:
-                self.app.tracking_axis_mode = "horizontal"
-            if old_mode != self.app.tracking_axis_mode:
-                self.app.project_manager.project_dirty = True
-                self.app.logger.info(f"Tracking axis mode set to: {self.app.tracking_axis_mode}", extra={'status_message': True})
-                self.app.app_settings.set("tracking_axis_mode", self.app.tracking_axis_mode) # Auto-save
-                self.app.energy_saver.reset_activity_timer()
-
-        if self.app.tracking_axis_mode != "both":
-            imgui.text("Output Single Axis To:")
-            output_targets = ["Timeline 1 (Primary)", "Timeline 2 (Secondary)"]
-            current_output_target_idx = 1 if self.app.single_axis_output_target == "secondary" else 0
-
-            output_target_changed, new_output_target_idx = imgui.combo("##SingleAxisOutputComboGlobal", current_output_target_idx, output_targets)
-            if output_target_changed:
-                old_target = self.app.single_axis_output_target
-                self.app.single_axis_output_target = "secondary" if new_output_target_idx == 1 else "primary"
-                if old_target != self.app.single_axis_output_target:
-                    self.app.project_manager.project_dirty = True
-                    self.app.logger.info(f"Single axis output target set to: {self.app.single_axis_output_target}", extra={'status_message': True})
-                    self.app.app_settings.set("single_axis_output_target", self.app.single_axis_output_target) # Auto-save
-                    self.app.energy_saver.reset_activity_timer()
-        if disable_axis_controls:
-            imgui.pop_style_var()
-            imgui.internal.pop_item_flag()
+                app.tracking_axis_mode = "horizontal"
+            app.app_settings.set("tracking_axis_mode", app.tracking_axis_mode)
+            
+        imgui.pop_item_width()
+        
+        # Show single axis output target when not tracking both axes
+        if app.tracking_axis_mode != "both":
+            imgui.same_line()
+            imgui.push_item_width(120)
+            output_target_opts = ["Primary Timeline", "Secondary Timeline"]
+            current_target_idx = 0 if app.single_axis_output_target == "primary" else 1
+            
+            changed, new_target_idx = imgui.combo("##SingleAxisOutput", current_target_idx, output_target_opts)
+            if changed:
+                app.single_axis_output_target = "primary" if new_target_idx == 0 else "secondary"
+                app.app_settings.set("single_axis_output_target", app.single_axis_output_target)
+                
+            imgui.pop_item_width()
+            
+        _tooltip_if_hovered(
+            "Select which movement axes to track during analysis.\n"
+            "'Both Axis' tracks vertical and horizontal movement.\n"
+            "'Vertical Only' or 'Horizontal Only' tracks only one axis.\n"
+            "When tracking a single axis, choose which axis to output."
+        )
 
     def _render_oscillation_detector_settings(self):
         app = self.app
@@ -2236,109 +2259,6 @@ class ControlPanelUI:
 
         if disabled and imgui.is_item_hovered():
             imgui.set_tooltip("Disabled while another process is active.")
-
-    def _render_tracking_axes_mode(self, stage_proc):
-        """Render UI controls for selecting which movement axes to track and output."""
-        app = self.app
-        
-        imgui.text("Axis:")
-        imgui.same_line()
-        imgui.push_item_width(100)
-        axis_mode_opts = ["Both", "Vertical", "Horizontal"]
-        current_mode_idx = 0
-        if app.tracking_axis_mode == "vertical":
-            current_mode_idx = 1
-        elif app.tracking_axis_mode == "horizontal":
-            current_mode_idx = 2
-            
-        changed, new_mode_idx = imgui.combo("##TrackingAxes", current_mode_idx, axis_mode_opts)
-        if changed:
-            if new_mode_idx == 0:
-                app.tracking_axis_mode = "both"
-            elif new_mode_idx == 1:
-                app.tracking_axis_mode = "vertical"
-            else:
-                app.tracking_axis_mode = "horizontal"
-            app.app_settings.set("tracking_axis_mode", app.tracking_axis_mode)
-            
-        imgui.pop_item_width()
-        
-        # Show single axis output target when not tracking both axes
-        if app.tracking_axis_mode != "both":
-            imgui.same_line()
-            imgui.push_item_width(120)
-            output_target_opts = ["Primary Timeline", "Secondary Timeline"]
-            current_target_idx = 0 if app.single_axis_output_target == "primary" else 1
-            
-            changed, new_target_idx = imgui.combo("##SingleAxisOutput", current_target_idx, output_target_opts)
-            if changed:
-                app.single_axis_output_target = "primary" if new_target_idx == 0 else "secondary"
-                app.app_settings.set("single_axis_output_target", app.single_axis_output_target)
-                
-            imgui.pop_item_width()
-            
-        _tooltip_if_hovered(
-            "Select which movement axes to track during analysis.\n"
-            "'Both Axis' tracks vertical and horizontal movement.\n"
-            "'Vertical Only' or 'Horizontal Only' tracks only one axis.\n"
-            "When tracking a single axis, choose which axis to output."
-        )
-
-    def _render_start_stop_buttons(self, stage_proc, fs_proc, event_handlers):
-        """Render Start and Stop/Abort buttons for analysis."""
-        app = self.app
-        app_state = app.app_state_ui
-        
-        # Check if analysis is currently running
-        analysis_active = stage_proc.full_analysis_active
-        video_loaded = app.processor and app.processor.is_video_open()
-        
-        # Check if live tracking is running
-        is_live_tracking_running = (app.processor and
-                                    app.processor.is_processing and
-                                    app.processor.enable_tracker_processing)
-        
-        # Determine button states and availability
-        can_start = video_loaded and not analysis_active and not is_live_tracking_running and not app.is_setting_user_roi_mode
-        can_stop = analysis_active or is_live_tracking_running
-        
-        # Start button
-        with _DisabledScope(not can_start):
-            
-            imgui.separator()
-            if imgui.button("Start Analysis", width=120):
-                if app_state.selected_tracker_mode in (self.TrackerMode.OFFLINE_2_STAGE, self.TrackerMode.OFFLINE_3_STAGE, self.TrackerMode.OFFLINE_3_STAGE_MIXED):
-                    event_handlers.handle_start_ai_cv_analysis()
-                else:
-                    event_handlers.handle_start_live_tracker_click()
-        
-        if not can_start and imgui.is_item_hovered():
-            if not video_loaded:
-                imgui.set_tooltip("No video loaded. Please load a video first.")
-            elif app.is_setting_user_roi_mode:
-                imgui.set_tooltip("Please complete ROI selection first.")
-            else:
-                imgui.set_tooltip("Analysis already in progress.")
-        imgui.same_line()
-        
-        # Stop/Abort button
-        with _DisabledScope(not can_stop):
-            if imgui.button("Stop Analysis", width=120):
-                if analysis_active:
-                    event_handlers.handle_abort_process_click()
-                elif is_live_tracking_running:
-                    event_handlers.handle_reset_live_tracker_click()
-        
-        if not can_stop and imgui.is_item_hovered():
-            imgui.set_tooltip("No analysis currently running.")
-        
-        # Show current status
-        if analysis_active:
-            imgui.same_line()
-            imgui.text_colored("Analysis Running...", *config.ControlPanelColors.STATUS_READY)
-        elif is_live_tracking_running:
-            imgui.same_line()
-            imgui.text_colored("Tracking...", *config.ControlPanelColors.STATUS_INFO)
 
     # ---------------- Post-processing manual tools ----------------
 
