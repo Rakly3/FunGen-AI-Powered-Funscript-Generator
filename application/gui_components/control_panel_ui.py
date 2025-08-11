@@ -252,13 +252,11 @@ class ControlPanelUI:
 
         modes_display = [
             "Live Oscillation Detector",
-            "Live - YOLO + Oscillation (Auto focus)",
             "Live Tracking (YOLO ROI)",
             "Offline AI Analysis (3-Stage)",
         ]
         modes_enum = [
             tracker_mode.OSCILLATION_DETECTOR,
-            tracker_mode.LIVE_YOLO_OSCILLATION,
             tracker_mode.LIVE_YOLO_ROI,
             tracker_mode.OFFLINE_3_STAGE,
         ]
@@ -303,7 +301,6 @@ class ControlPanelUI:
             self.TrackerMode.LIVE_YOLO_ROI,
             self.TrackerMode.LIVE_USER_ROI,
             self.TrackerMode.OSCILLATION_DETECTOR,
-            self.TrackerMode.LIVE_YOLO_OSCILLATION,
         )
         is_playback_active = processor and processor.is_processing and not processor.enable_tracker_processing
 
@@ -343,7 +340,6 @@ class ControlPanelUI:
             tracker_mode.OSCILLATION_DETECTOR,
             tracker_mode.LIVE_YOLO_ROI,
             tracker_mode.LIVE_USER_ROI,
-            tracker_mode.LIVE_YOLO_OSCILLATION,
             tracker_mode.OFFLINE_2_STAGE,
             tracker_mode.OFFLINE_3_STAGE,
             #tracker_mode.OFFLINE_3_STAGE_MIXED,
@@ -360,7 +356,6 @@ class ControlPanelUI:
                 "Oscillation Detector",
                 "Live YOLO ROI Detection",
                 "Live User ROI",
-                "Live - YOLO + Oscillation (Experimental)",
                 "Offline AI Analysis (2-Stage)",
                 "Offline AI Analysis (3-Stage)",
             ]
@@ -377,9 +372,8 @@ class ControlPanelUI:
                     tracker_mode.OSCILLATION_DETECTOR: 0,
                     tracker_mode.LIVE_YOLO_ROI: 1,
                     tracker_mode.LIVE_USER_ROI: 2,
-                    tracker_mode.LIVE_YOLO_OSCILLATION: 3,
-                    tracker_mode.OFFLINE_2_STAGE: 4,
-                    tracker_mode.OFFLINE_3_STAGE: 5,
+                    tracker_mode.OFFLINE_2_STAGE: 3,
+                    tracker_mode.OFFLINE_3_STAGE: 4,
                 }
                 try:
                     cur_idx = mode_to_index.get(app_state.selected_tracker_mode, 0)
@@ -406,9 +400,8 @@ class ControlPanelUI:
                     0: tracker_mode.OSCILLATION_DETECTOR,
                     1: tracker_mode.LIVE_YOLO_ROI,
                     2: tracker_mode.LIVE_USER_ROI,
-                    3: tracker_mode.LIVE_YOLO_OSCILLATION,
-                    4: tracker_mode.OFFLINE_2_STAGE,
-                    5: tracker_mode.OFFLINE_3_STAGE,
+                    3: tracker_mode.OFFLINE_2_STAGE,
+                    4: tracker_mode.OFFLINE_3_STAGE,
                 }
                 new_mode = index_to_mode.get(new_idx, tracker_mode.OSCILLATION_DETECTOR)
                 # Clear all overlays only when switching to a different mode
@@ -424,8 +417,6 @@ class ControlPanelUI:
                         tr.set_tracking_mode("USER_FIXED_ROI")
                     elif new_mode == tracker_mode.OSCILLATION_DETECTOR:
                         tr.set_tracking_mode("OSCILLATION_DETECTOR")
-                    elif new_mode == tracker_mode.LIVE_YOLO_OSCILLATION:
-                        tr.set_tracking_mode("YOLO_OSCILLATION")
                     elif new_mode == tracker_mode.LIVE_YOLO_ROI:
                         tr.set_tracking_mode("YOLO_ROI")
                     else:
@@ -522,15 +513,7 @@ class ControlPanelUI:
         disable_after = (not video_loaded) or processing_active
 
         self._render_start_stop_buttons(stage_proc, fs_proc, events)
-        # Show YOLO + Oscillation settings in Run Control tab when applicable
-        if app_state.selected_tracker_mode == tracker_mode.LIVE_YOLO_OSCILLATION:
-            # imgui.separator()
-            open_, _ = imgui.collapsing_header(
-                "YOLO + Oscillation Settings##RunYOLOOscillation",
-                flags=imgui.TREE_NODE_DEFAULT_OPEN,
-            )
-            if open_:
-                self._render_yolo_oscillation_settings()
+        # No YOLO + Oscillation settings in this branch
         # imgui.separator()
 
         self._render_interactive_refinement_controls()
@@ -575,7 +558,6 @@ class ControlPanelUI:
 
         if tmode in (
             self.TrackerMode.LIVE_YOLO_ROI,
-            self.TrackerMode.LIVE_YOLO_OSCILLATION,
             self.TrackerMode.OFFLINE_2_STAGE,
             self.TrackerMode.OFFLINE_3_STAGE,
             self.TrackerMode.OFFLINE_3_STAGE_MIXED,
@@ -585,13 +567,12 @@ class ControlPanelUI:
             # imgui.separator()
 
         adv = app.app_state_ui.show_advanced_options
-        if tmode in (self.TrackerMode.LIVE_YOLO_ROI, self.TrackerMode.LIVE_YOLO_OSCILLATION, self.TrackerMode.LIVE_USER_ROI) and adv:
+        if tmode in (self.TrackerMode.LIVE_YOLO_ROI, self.TrackerMode.LIVE_USER_ROI) and adv:
             self._render_live_tracker_settings()
             # imgui.separator()
 
         if tmode in (
             self.TrackerMode.LIVE_YOLO_ROI,
-            self.TrackerMode.LIVE_YOLO_OSCILLATION,
             self.TrackerMode.OFFLINE_2_STAGE,
             self.TrackerMode.OFFLINE_3_STAGE,
             self.TrackerMode.OFFLINE_3_STAGE_MIXED,
@@ -605,7 +586,6 @@ class ControlPanelUI:
 
         with_config = {
             self.TrackerMode.LIVE_YOLO_ROI,
-            self.TrackerMode.LIVE_YOLO_OSCILLATION,
             self.TrackerMode.LIVE_USER_ROI,
             self.TrackerMode.OFFLINE_2_STAGE,
             self.TrackerMode.OFFLINE_3_STAGE,
@@ -1180,7 +1160,7 @@ class ControlPanelUI:
             self._render_stage_progress_ui(stage_proc)
             return
 
-        if mode in (self.TrackerMode.LIVE_YOLO_ROI, self.TrackerMode.LIVE_USER_ROI, self.TrackerMode.OSCILLATION_DETECTOR, self.TrackerMode.LIVE_YOLO_OSCILLATION):
+        if mode in (self.TrackerMode.LIVE_YOLO_ROI, self.TrackerMode.LIVE_USER_ROI, self.TrackerMode.OSCILLATION_DETECTOR):
             tr = app.tracker
             imgui.text(">> Tracker Status")
             imgui.separator()
@@ -1436,7 +1416,7 @@ class ControlPanelUI:
             if selected_mode in [self.TrackerMode.OFFLINE_3_STAGE, self.TrackerMode.OFFLINE_3_STAGE_MIXED, self.TrackerMode.OFFLINE_2_STAGE]:
                 start_text = "Start AI Analysis (Range)" if fs_proc.scripting_range_active else "Start Full AI Analysis"
                 handler = event_handlers.handle_start_ai_cv_analysis
-            elif selected_mode in [self.TrackerMode.LIVE_YOLO_ROI, self.TrackerMode.LIVE_USER_ROI, self.TrackerMode.OSCILLATION_DETECTOR, self.TrackerMode.LIVE_YOLO_OSCILLATION]:
+            elif selected_mode in [self.TrackerMode.LIVE_YOLO_ROI, self.TrackerMode.LIVE_USER_ROI, self.TrackerMode.OSCILLATION_DETECTOR]:
                 start_text = "Start Live Tracking (Range)" if fs_proc.scripting_range_active else "Start Live Tracking"
                 handler = event_handlers.handle_start_live_tracker_click
             

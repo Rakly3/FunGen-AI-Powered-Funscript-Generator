@@ -130,8 +130,7 @@ class AppEventHandlers:
             self.app.tracker.set_tracking_mode("USER_FIXED_ROI")
         elif selected_mode_from_ui == TrackerMode.OSCILLATION_DETECTOR:
             self.app.tracker.set_tracking_mode("OSCILLATION_DETECTOR")
-        elif selected_mode_from_ui == TrackerMode.LIVE_YOLO_OSCILLATION:
-            self.app.tracker.set_tracking_mode("YOLO_OSCILLATION")
+
         elif selected_mode_from_ui == TrackerMode.LIVE_YOLO_ROI:
             self.app.tracker.set_tracking_mode("YOLO_ROI")
 
