@@ -444,35 +444,40 @@ class AppStageProcessor:
         # Directly put the validated/corrected data onto the queue.
         self.gui_event_queue.put(("stage2_dual_progress", main_info_from_module, sub_info_from_module))
         
-        # Create checkpoint if needed (use main progress for frame tracking)
+        # Create checkpoint if needed (use main progress for frame tracking) - throttle to ~2s
         try:
-            main_current, main_total, main_name = main_info_from_module
-            if isinstance(sub_info_from_module, dict):
-                sub_current = sub_info_from_module.get("current", 0)
-                stage_data = {
-                    "main_step": main_current,
-                    "main_total": main_total,
-                    "main_name": main_name,
-                    "sub_current": sub_current,
-                    "sub_info": sub_info_from_module
-                }
-            else:
-                sub_current, sub_total, sub_name = sub_info_from_module
-                stage_data = {
-                    "main_step": main_current,
-                    "main_total": main_total,
-                    "main_name": main_name,
-                    "sub_current": sub_current,
-                    "sub_total": sub_total,
-                    "sub_name": sub_name
-                }
+            now = time.time()
+            if not hasattr(self, "_last_s2_checkpoint_ts"):
+                self._last_s2_checkpoint_ts = 0.0
+            if (now - self._last_s2_checkpoint_ts) >= 2.0:
+                main_current, main_total, main_name = main_info_from_module
+                if isinstance(sub_info_from_module, dict):
+                    sub_current = sub_info_from_module.get("current", 0)
+                    stage_data = {
+                        "main_step": main_current,
+                        "main_total": main_total,
+                        "main_name": main_name,
+                        "sub_current": sub_current,
+                        "sub_info": sub_info_from_module
+                    }
+                else:
+                    sub_current, sub_total, sub_name = sub_info_from_module
+                    stage_data = {
+                        "main_step": main_current,
+                        "main_total": main_total,
+                        "main_name": main_name,
+                        "sub_current": sub_current,
+                        "sub_total": sub_total,
+                        "sub_name": sub_name
+                    }
+                
+                # Use a composite frame index for Stage 2
+                composite_frame = main_current * 1000 + (sub_current if isinstance(sub_current, int) else 0)
+                composite_total = main_total * 1000
+                self._create_checkpoint_if_needed(ProcessingStage.STAGE_2_OPTICAL_FLOW, composite_frame, composite_total, stage_data)
+                self._last_s2_checkpoint_ts = now
             
-            # Use a composite frame index for Stage 2
-            composite_frame = main_current * 1000 + (sub_current if isinstance(sub_current, int) else 0)
-            composite_total = main_total * 1000
-            self._create_checkpoint_if_needed(ProcessingStage.STAGE_2_OPTICAL_FLOW, composite_frame, composite_total, stage_data)
-            
-        except Exception as e:
+        except Exception:
             # Don't let checkpoint errors interrupt processing
             pass
 
@@ -603,7 +608,7 @@ class AppStageProcessor:
             self.stage3_status_text = "Queued..."
 
         self.logger.info("Starting Full Analysis sequence...", extra={'status_message': True})
-        self.stage_thread = threading.Thread(target=self._run_full_analysis_thread_target, daemon=True)
+        self.stage_thread = threading.Thread(target=self._run_full_analysis_thread_target, daemon=True, name="StagePipelineThread")
         self.stage_thread.start()
         self.app.energy_saver.reset_activity_timer()
 

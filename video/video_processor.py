@@ -109,7 +109,7 @@ class VideoProcessor:
         self.frame_cache = OrderedDict()
         self.frame_cache_max_size = cache_size
         self.frame_cache_lock = threading.Lock()
-        self.batch_fetch_size = 50
+        self.batch_fetch_size = 120
 
     def _clear_cache(self):
         with self.frame_cache_lock:
@@ -411,8 +411,9 @@ class VideoProcessor:
                 cmd2.extend(['-frames:v', str(num_frames_to_fetch)])
                 cmd2.extend(['-pix_fmt', 'bgr24', '-f', 'rawvideo', 'pipe:1'])
 
-                self.logger.debug(f"get_frames_batch Pipe 1 CMD: {' '.join(shlex.quote(str(x)) for x in cmd1)}")
-                self.logger.debug(f"get_frames_batch Pipe 2 CMD: {' '.join(shlex.quote(str(x)) for x in cmd2)}")
+                if self.logger.isEnabledFor(logging.DEBUG):
+                    self.logger.debug(f"get_frames_batch Pipe 1 CMD: {' '.join(shlex.quote(str(x)) for x in cmd1)}")
+                    self.logger.debug(f"get_frames_batch Pipe 2 CMD: {' '.join(shlex.quote(str(x)) for x in cmd2)}")
 
                 # Windows fix: prevent terminal windows from spawning
                 creation_flags = subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
@@ -437,8 +438,9 @@ class VideoProcessor:
                 cmd_single.extend(['-vf', effective_vf])
                 cmd_single.extend(['-frames:v', str(num_frames_to_fetch)])
                 cmd_single.extend(['-pix_fmt', 'bgr24', '-f', 'rawvideo', 'pipe:1'])
-                self.logger.debug(
-                    f"get_frames_batch CMD (single pipe): {' '.join(shlex.quote(str(x)) for x in cmd_single)}")
+                if self.logger.isEnabledFor(logging.DEBUG):
+                    self.logger.debug(
+                        f"get_frames_batch CMD (single pipe): {' '.join(shlex.quote(str(x)) for x in cmd_single)}")
                 creation_flags = subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
                 local_p2_proc = subprocess.Popen(cmd_single, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                                  bufsize=self.frame_size_bytes * min(num_frames_to_fetch, 20),
@@ -489,8 +491,9 @@ class VideoProcessor:
                 self.current_frame_index = frame_index_abs
                 return frame
 
-        self.logger.debug(
-            f"Cache MISS for frame {frame_index_abs}. Attempting batch fetch using get_frames_batch (batch size: {self.batch_fetch_size}).")
+        if self.logger.isEnabledFor(logging.DEBUG):
+            self.logger.debug(
+                f"Cache MISS for frame {frame_index_abs}. Attempting batch fetch using get_frames_batch (batch size: {self.batch_fetch_size}).")
 
         batch_start_frame = max(0, frame_index_abs - self.batch_fetch_size // 2)
         if self.total_frames > 0:

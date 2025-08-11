@@ -1161,7 +1161,7 @@ class ROITracker:
                         new_rw = 0
 
                         # Check main_interaction_class which is more stable than the instantaneous best name
-                        self.logger.info(f"Main interaction class: {self.main_interaction_class}")
+                        self.logger.debug(f"Main interaction class: {self.main_interaction_class}")
                         if self.main_interaction_class in ["face", "hand"]:
                             new_rw = penis_w
                         else:
